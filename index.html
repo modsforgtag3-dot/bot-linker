@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Quest Link</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial;background:#111;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px}
+    .card{background:#151515;padding:18px;border-radius:12px;max-width:540px;width:100%;text-align:center}
+    input{font-size:20px;padding:10px;width:80%;margin-top:12px;border-radius:8px;border:1px solid #333;background:#0f0f0f;color:#fff}
+    button{margin-top:12px;padding:10px 16px;font-size:18px;border-radius:8px;border:none;background:#2f7df6;color:#fff;cursor:pointer}
+    #status{margin-top:14px;color:#9f9f9f}
+    small{color:#7f8c8d}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Link your Quest</h1>
+    <p>Enter the code shown by the Discord bot.</p>
+    <input id="code" placeholder="Enter code (e.g. ABC123)" maxlength="8" autocomplete="off" />
+    <div>
+      <button id="pairBtn">Pair</button>
+      <button id="unlinkBtn">Unlink</button>
+    </div>
+    <div id="status">Connecting to server…</div>
+    <div style="margin-top:8px">
+      <label style="font-size:14px;color:#9f9f9f">Device ID / Name</label>
+      <input id="deviceName" placeholder="Device name (optional)" style="width:80%;margin-top:6px" />
+      <div><small id="deviceId"></small></div>
+    </div>
+  </div>
+
+<script>
+  // CHANGE THIS to your PC LAN IP (example: ws://192.168.1.27:8765)
+  const WS_URL = "ws://192.168.4.67:8765";
+
+  const statusEl = document.getElementById('status');
+  const codeEl = document.getElementById('code');
+  const deviceIdEl = document.getElementById('deviceId');
+  const pairBtn = document.getElementById('pairBtn');
+  const unlinkBtn = document.getElementById('unlinkBtn');
+
+  // create persistent device id and name if possible (sessionStorage)
+  let deviceId = sessionStorage.getItem('device_id');
+  let deviceName = sessionStorage.getItem('device_name');
+  if (!deviceId) {
+    deviceId = 'quest_' + Math.random().toString(36).slice(2,10);
+    sessionStorage.setItem('device_id', deviceId);
+  }
+  if (!deviceName) {
+    deviceName = 'Quest-' + Math.random().toString(36).slice(2,6);
+    sessionStorage.setItem('device_name', deviceName);
+  }
+  deviceIdEl.textContent = 'Device ID: ' + deviceId + ' — Name: ' + deviceName;
+  const deviceNameInput = document.getElementById('deviceName');
+  deviceNameInput.value = deviceName;
+  deviceNameInput.addEventListener('change', () => {
+    deviceName = deviceNameInput.value.trim() || deviceName;
+    sessionStorage.setItem('device_name', deviceName);
+    deviceIdEl.textContent = 'Device ID: ' + deviceId + ' — Name: ' + deviceName;
+  });
+
+  let ws;
+  function connect(){
+    try {
+      ws = new WebSocket(WS_URL);
+    } catch(e){
+      statusEl.textContent = 'Connection failed: invalid WS URL';
+      return;
+    }
+
+    ws.onopen = () => {
+      statusEl.textContent = 'Connected to server';
+      // hello handshake
+      ws.send(JSON.stringify({type:'hello', device_id:deviceId, device_name: deviceName}));
+    };
+
+    ws.onclose = () => {
+      statusEl.textContent = 'Disconnected — retrying in 2s';
+      setTimeout(connect, 2000);
+    };
+
+    ws.onerror = (e) => {
+      console.error('WS error', e);
+      statusEl.textContent = 'WebSocket error';
+    };
+
+    ws.onmessage = (ev) => {
+      let data;
+      try { data = JSON.parse(ev.data); } catch(e){ data = null; }
+      if (!data) return;
+
+      if (data.type === 'pair_result'){
+        if (data.ok){
+          statusEl.textContent = 'Paired! Discord ID: ' + data.discord_id;
+        } else {
+          statusEl.textContent = 'Pair failed: ' + (data.reason || 'unknown');
+        }
+      } else if (data.type === 'hello'){
+        // server ack
+      } else if (data.type === 'discord_message'){
+        // show discord->device message
+        statusEl.textContent = 'Message from Discord: ' + (data.text || '');
+      } else if (data.type === 'force_unlink'){
+        statusEl.textContent = 'You have been unlinked by the bot';
+      }
+    };
+  }
+
+  pairBtn.addEventListener('click', () => {
+    const code = codeEl.value.trim().toUpperCase();
+    if (!code){
+      statusEl.textContent = 'Please enter a code';
+      return;
+    }
+    if (!ws || ws.readyState !== WebSocket.OPEN){
+      statusEl.textContent = 'Not connected';
+      return;
+    }
+    // update name from input before pairing
+    deviceName = deviceNameInput.value.trim() || deviceName;
+    sessionStorage.setItem('device_name', deviceName);
+    ws.send(JSON.stringify({type:'pair', code: code, device_id: deviceId, device_name: deviceName}));
+    statusEl.textContent = 'Sent pairing request…';
+  });
+
+  unlinkBtn.addEventListener('click', () => {
+    if (!ws || ws.readyState !== WebSocket.OPEN){
+      statusEl.textContent = 'Not connected';
+      return;
+    }
+    ws.send(JSON.stringify({type:'unlink', device_id: deviceId, device_name: deviceName}));
+    statusEl.textContent = 'Sent unlink request…';
+  });
+
+  connect();
+</script>
+</body>
+</html>
