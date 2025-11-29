@@ -31,14 +31,36 @@
   </div>
 
 <script>
-  // CHANGE THIS to your PC LAN IP (example: ws://192.168.1.27:8765)
-  const WS_URL = "ws://192.168.4.67:8765";
+  // Default local WS URL (you can override this by adding ?ws=<wss-url> to the page)
+  // Example override: https://youruser.github.io/repo/?ws=wss://abcd.trycloudflare.com
+  const DEFAULT_WS = "ws://192.168.4.67:8765";
+
+  // helper to read ?ws= override
+  function getQueryParam(name) {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get(name);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // compute WS_URL: prefer explicit ?ws= override, else use default
+  let WS_URL = getQueryParam('ws') || DEFAULT_WS;
+  // if page is served over https and the URL is ws://local, try to auto-convert localhost to wss
+  if (window.location.protocol === 'https:' && WS_URL.startsWith('ws://')) {
+    // leave it; browser will block insecure ws from https — prefer using a tunnel with wss://
+  }
 
   const statusEl = document.getElementById('status');
   const codeEl = document.getElementById('code');
   const deviceIdEl = document.getElementById('deviceId');
   const pairBtn = document.getElementById('pairBtn');
   const unlinkBtn = document.getElementById('unlinkBtn');
+  const wsUrlEl = document.createElement('div');
+  wsUrlEl.style.marginTop = '8px';
+  wsUrlEl.style.color = '#9f9f9f';
+  document.querySelector('.card').appendChild(wsUrlEl);
 
   // create persistent device id and name if possible (sessionStorage)
   let deviceId = sessionStorage.getItem('device_id');
@@ -134,6 +156,8 @@
   });
 
   connect();
+  // show active WS URL
+  wsUrlEl.textContent = 'WebSocket: ' + WS_URL;
 </script>
 </body>
 </html>
