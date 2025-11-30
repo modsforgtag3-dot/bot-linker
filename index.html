@@ -33,9 +33,10 @@
 <script>
   // Default local WS URL (you can override this by adding ?ws=<wss-url> to the page)
   // Example override: https://youruser.github.io/repo/?ws=wss://abcd.trycloudflare.com
-  const DEFAULT_WS = "ws://192.168.4.67:8765";
+  // The device IP may be supplied via `?deviceIP=192.168.1.50` or via the `?ws=` override.
+  // If `deviceIP` is set, the default WS becomes `ws://<deviceIP>:8765`.
 
-  // helper to read ?ws= override
+  // helper to read query params
   function getQueryParam(name) {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -44,8 +45,10 @@
       return null;
     }
   }
+  const deviceIP = getQueryParam('deviceIP') || null;
+  const DEFAULT_WS = deviceIP ? `ws://${deviceIP}:8765` : 'ws://192.168.4.67:8765';
 
-  // compute WS_URL: prefer explicit ?ws= override, else use default
+  // compute WS_URL: prefer explicit ?ws= override, else use deviceIP-based default
   let WS_URL = getQueryParam('ws') || DEFAULT_WS;
   // if page is served over https and the URL is ws://local, try to auto-convert localhost to wss
   if (window.location.protocol === 'https:' && WS_URL.startsWith('ws://')) {
