@@ -13,6 +13,24 @@ logging.basicConfig(level=logging.INFO)
 
 DB_FILE = "links.db"
 WEBSOCKET_PORT = 8765
+def _get_local_ip():
+    """Return a reasonable LAN IP for this machine (best-effort)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # doesn't actually send data; used to get the default outbound interface IP
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = "0.0.0.0"
+    finally:
+        try:
+            s.close()
+        except Exception:
+            pass
+    return ip
+
+# Allow explicit override via environment variable PC_LOCAL_IP, otherwise autodetect
+PC_LOCAL_IP = os.getenv("PC_LOCAL_IP") or _get_local_ip()
 # REQUIRED: set your bot token here (development/testing only).
 # This file is currently configured to use the hard-coded token instead
 # of reading from the environment. Replace the placeholder below with
@@ -21,7 +39,7 @@ WEBSOCKET_PORT = 8765
 # For Replit deployment: comment out the line below and use:
 #   BOT_TOKEN = os.getenv("BOT_TOKEN")
 #
-BOT_TOKEN = "MTQ0MzgwOTU4MjA2ODc5MzUzNw.GSXVIx.rJdtjjRqO9RmyNNBJScKXQMyr1zhzU9tFMR0fg"  # or set directly for local testing outside of hosting servers
+BOT_TOKEN = "MTQ0MzgwOTU4MjA2ODc5MzUzNw.GZBNNM.EKme6Q2x7zmlvNV_qL41qlHtp6__xYF94DDd2M"  # set your bot token string here for local testing
 # --------------------------------
 # Database Setup
 # --------------------------------
@@ -466,9 +484,10 @@ async def vrlibrary_cmd(interaction: discord.Interaction):
 # MAIN
 # --------------------------------
 async def run_websocket_server():
-    logging.info(f"Starting WebSocket server on ws://0.0.0.0:{WEBSOCKET_PORT}")
+    bind_ip = PC_LOCAL_IP or "0.0.0.0"
+    logging.info(f"Starting WebSocket server on ws://{bind_ip}:{WEBSOCKET_PORT}")
     try:
-        async with serve(ws_handler, "0.0.0.0", WEBSOCKET_PORT):
+        async with serve(ws_handler, bind_ip, WEBSOCKET_PORT):
             logging.info("WebSocket server started successfully")
             # Keep the server running indefinitely
             await asyncio.sleep(float('inf'))
@@ -477,15 +496,22 @@ async def run_websocket_server():
         logging.info("Waiting 5 seconds for port to free up...")
         await asyncio.sleep(5)
         # Retry
-        async with serve(ws_handler, "0.0.0.0", WEBSOCKET_PORT):
+        async with serve(ws_handler, bind_ip, WEBSOCKET_PORT):
             logging.info("WebSocket server started successfully (retry)")
             await asyncio.sleep(float('inf'))
 
 
 async def run_discord_bot():
     bot_token = BOT_TOKEN
+    # allow users who accidentally pasted the header form "Bot <token>"
+    if isinstance(bot_token, str):
+        bot_token = bot_token.strip()
+        if bot_token.startswith("Bot "):
+            logging.warning("BOT_TOKEN appears to include a leading 'Bot ' prefix — stripping it.")
+            bot_token = bot_token.split(" ", 1)[1]
+
     if not bot_token or bot_token == "YOUR_BOT_TOKEN_HERE":
-        raise RuntimeError("BOT_TOKEN missing: please set the BOT_TOKEN value at the top of server_ws.py")
+        raise RuntimeError("BOT_TOKEN missing or invalid: please set the BOT_TOKEN value at the top of server_ws.py")
     logging.info("Starting Discord bot")
     try:
         await bot.start(bot_token)
